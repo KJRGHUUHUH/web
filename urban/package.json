@@ -1,0 +1,9 @@
+{
+  "name": "cashfree-tshirt-store",
+  "version": "1.0.0",
+  "description": "Backend function for Cashfree integration.",
+  "main": "netlify/functions/create-cashfree-order.js",
+  "dependencies": {
+    "node-fetch": "^2.6.1"
+  }
+}
