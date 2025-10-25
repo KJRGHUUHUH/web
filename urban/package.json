@@ -1,9 +1,13 @@
 {
-  "name": "cashfree-tshirt-store",
+  "name": "my-simple-web-app",
   "version": "1.0.0",
-  "description": "Backend function for Cashfree integration.",
-  "main": "netlify/functions/create-cashfree-order.js",
+  "description": "A basic application to test the build process.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
-    "node-fetch": "^2.6.1"
+    "express": "^4.19.2"
   }
 }
