@@ -1,98 +1,116 @@
 const express = require('express');
 const cors = require('cors');
-// Use 'axios' or 'node-fetch' to make the real API call to Cashfree
-const axios = require('axios'); 
+const axios = require('axios');
+require('dotenv').config();
 
 const app = express();
-// --- FIX: Use the port from the environment variables for deployment ---
+// Use port from environment or default to 4000
 const port = process.env.PORT || 4000;
 
-// --- !!! IMPORTANT: READ KEYS FROM ENVIRONMENT VARIABLES !!! ---
-// We will set these variables in our hosting platform, not here.
-const CASHFREE_CLIENT_ID = process.env.CASHFREE_CLIENT_ID;
-const CASHFREE_CLIENT_SECRET = process.env.CASHFREE_CLIENT_SECRET;
+// --- CORS Configuration ---
+// Define allowed origins
+const allowedOrigins = [
+    'http://localhost:5500', // For local dev with VS Code Live Server
+    'http://127.0.0.1:5500', // Alias for Live Server
+    'http://localhost:3000'  // For local dev with `npx serve`
+];
 
-// Use a variable for the API URL so we can switch between test and live
-const CASHFREE_API_URL = process.env.NODE_ENV === 'production'
-    ? 'https://api.cashfree.com/pg/orders'         // Production URL
-    : 'https://sandbox.cashfree.com/pg/orders'; // Sandbox URL
-
-// --- Configure CORS for your deployed frontend ---
-// Replace 'https://your-frontend-url.com' with your actual frontend's URL
 const corsOptions = {
-    origin: process.env.NODE_ENV === 'production'
-        ? 'https://your-frontend-url.com' // e.g., 'https://my-payment-page.netlify.app'
-        : 'http://localhost:5500'       // Allow local testing (or 127.0.0.1)
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    }
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// --- Removed the duplicate, hardcoded keys that were here ---
+// *** FIX: Add Security & Content-Type Headers ***
+app.use((req, res, next) => {
+    // Fixes 'x-content-type-options' missing header
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+});
 
-/**
- * This endpoint simulates creating an order with Cashfree.
- * In a real app, this is where you securely call the Cashfree API.
- */
+// --- API Endpoints ---
+
+// Health check endpoint
+app.get('/', (req, res) => {
+    res.status(200).send('Backend server is healthy and running.');
+});
+
+// Endpoint to create a payment session
 app.post('/create-payment-session', async (req, res) => {
-    console.log('Request received to create payment session...');
+    
+    // *** FIX: Add Cache-Control Header ***
+    // This API response should not be cached by the browser
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
 
-    // --- !!! THIS IS THE REAL BACKEND LOGIC YOU NEED TO BUILD !!! ---
-    // 1. Define order details (amount, currency, customer info, etc.)
-    const orderDetails = {
-        order_id: `order_${Date.now()}`,
-        order_amount: 99.00,
-        order_currency: "INR", // Change as needed
-        customer_details: {
-            customer_id: `customer_${Date.now()}`,
-            customer_email: "customer@example.com",
-            customer_phone: "9876543210"
+    console.log('Attempting to create payment session...');
+    
+    const CASHFREE_CLIENT_ID = process.env.CASHFREE_CLIENT_ID;
+    const CASHFREE_CLIENT_SECRET = process.env.CASHFREE_CLIENT_SECRET;
+    const NODE_ENV = process.env.NODE_ENV || 'development';
+
+    const url = (NODE_ENV === 'production')
+        ? 'https://api.cashfree.com/pg/orders'
+        : 'https://sandbox.cashfree.com/pg/orders';
+
+    // Check if credentials are loaded
+    if (!CASHFREE_CLIENT_ID || !CASHFREE_CLIENT_SECRET) {
+        console.error('Missing Cashfree credentials. Check environment variables.');
+        // Set charset for error response
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    const orderId = `ORDER_${Date.now()}`;
+    console.log(`Requesting session for Order ID: ${orderId}`);
+
+    const headers = {
+        'Content-Type': 'application/json',
+        'x-api-version': '2023-08-01',
+        'x-client-id': CASHFREE_CLIENT_ID,
+        'x-client-secret': CASHFREE_CLIENT_SECRET
+    };
+
+    const body = {
+        "order_id": orderId,
+        "order_amount": 1.00,
+        "order_currency": "INR",
+        "customer_details": {
+            "customer_id": "CUST_123",
+            "customer_email": "customer@example.com",
+            "customer_phone": "9876543210"
         },
-        order_meta: {
-            return_url: "https://your-website.com/return?order_id={order_id}"
-        }
+        "order_meta": {
+            "return_url": "https://your-frontend.com/return?order_id={order_id}"
+        },
+        "order_note": "Test order from miracleapparels"
     };
 
     try {
-        // 2. Make the secure API call to Cashfree
+        const response = await axios.post(url, body, { headers });
+        console.log('Cashfree API response received:', response.data);
         
-        // --- REAL API CALL (Now using environment variables) ---
-        const response = await axios.post(
-            CASHFREE_API_URL,
-            orderDetails,
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-client-id': CASHFREE_CLIENT_ID,
-                    'x-client-secret': CASHFREE_CLIENT_SECRET,
-                    'x-api-version': '2022-09-01' // Use the API version you are targeting
-                }
-            }
-        );
-        
-        const data = response.data;
-        
-        // 3. Send the REAL payment_session_id to the frontend
-        console.log("Real session created:", data.payment_session_id);
-        res.json({ paymentSessionId: data.payment_session_id });
-        
-        // --- MOCK RESPONSE (You should remove this) ---
-        /*
-        console.log("Simulating backend API call...");
-        const mockPaymentSessionId = "session_mock_" + Date.now() + "_" + Math.random().toString(36).substring(2);
-        console.log("Generated Mock Payment Session ID:", mockPaymentSessionId);
-        res.json({ paymentSessix onId: mockPaymentSessionId });
-        */
-        // --- END MOCK RESPONSE ---
+        // *** FIX: Set charset for success response ***
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.status(200).json(response.data);
 
     } catch (error) {
-        console.error("Error creating Cashfree order:", error.response ? error.response.data : error.message);
-        res.status(500).json({ error: "Failed to create payment session" });
+        console.error('Cashfree API Error:', error.response ? error.response.data : error.message);
+        // *** FIX: Set charset for error response ***
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.status(500).json({ error: 'Failed to create payment session' });
     }
-    // --- !!! END OF REAL BACKEND LOGIC ---
 });
 
+// Start the server
 app.listen(port, () => {
     console.log(`Backend server running at http://localhost:${port}`);
 });
-
